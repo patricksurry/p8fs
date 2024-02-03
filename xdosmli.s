@@ -155,7 +155,7 @@ DevMgr      LDY    #$05            ;The call spec for devices must
             PHP                    ;(do not allow interupts)
             SEI
 @loop       LDA    (parm),Y        ; be passed to drivers in zero page
-;TODO was |dhpCmd
+;TODO was STA |dhpCmd, Y   ; maybe some banking notation??
             STA    dhpCmd,Y       ;dhpCmd,unitNum,bufPtr,blockNum
             DEY
             BNE    @loop

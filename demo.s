@@ -1,30 +1,30 @@
 /*
-Before calling the MLI the first time we need to call InitMLI (no params)
-and then set up at least one block device driver pointing at a prodos disk.
-See below for a simple RAM disk demo.
+This demo sets up and tests a simple ram disk driver which exposes
+a small ProDOS disk image.  The disk image reserves blocks 0-1 for the boot loader
+(normally used by the full ProDOS to boot Apple hardware), blocks 2-5 for the
+volume direcory, block 6 (or more) for the bitmap and further blocks for file storage.
+Our example will use three blocks to store a "sapling file" called README.
+Since we don't care about the boot loader blocks, we'll map the image
+so that block 2 starts at RamDiskStart.
 
-Then we call the ProDOS MLI by JSR EntryMLI follwed by a 3 byte cmd/param block:
+Before calling the MLI the first time we need to call InitMLI (no params)
+and then set up at least one block device driver pointing at a ProDOS disk volume.
+We also need to reserve any memory pages in the lower 48K to avoid
+ProDOS allocating them for buffer space.
+
+From then on we can call ProDOS MLI normally by JSR EntryMLI
+followed by a 3 byte cmd/param block.  Parameters are read and/or written
+from the block pointed to by `CMDLIST`.
 
     JSR EntryMLI    ; Call Command Dispatcher
     DB  CMDNUM      ; This determines which call is being made
     DW  CMDLIST     ; A two-byte pointer to the parameter list
     BNE ERROR       ; Error if nonzero (A=err) also carry set
 
-On return A=C=0 on success or A=error code, C=1 on failure.
+The call returns to the instruction immediately following the parameters
+with A=C=0 on success or A=error code, C=1 on failure.
 In either case X, Y are unchanged.  See https://prodos8.com/docs/techref/calls-to-the-mli/
-*/
-
-/*
-this demo will set up and test a simple ram disk driver for a
-simple prodos volume containing blocks 0-1 for loader (ignored),
-2-5 for volume dir, 6 for bitmap, and 7-9 for a small sapling file
-our volume doesn't boot so we'll only map eight blocks 2-9 using 4K
-
-% prodos demovol.po create --size 10 --name DEMOVOL
-% prodos demovol.po import hhg.txt README
-% prodos demovol.po ls
-README                  893 2/00 ------ 24-02-03T08:59 24-02-03T08:59 3 @ 7
-    1 files in DEMOVOL F RW-BN- 24-02-03T08:59
+for more details.
 */
 
 PUTC = $f001
@@ -56,11 +56,11 @@ test_start:
         dex
         bne @mark
 
-test_getdatetime:   ; test a no-op (or configure ClockBegin in p8fs.s)
-        PUTS test_getdatetime_label
+test_gettime:   ; test a no-op (or configure ClockBegin in p8fs.s)
+        PUTS test_gettime_label
 
         jsr EntryMLI
-        .byte $82   ; GET_DATE_TIME
+        .byte MLI_GET_TIME
         .word 0     ; no params
 
         bne @fail
@@ -73,7 +73,7 @@ test_online:        ; test whether our device shows as online
         PUTS test_online_label
 
         jsr EntryMLI
-        .byte $C5   ; ON_LINE
+        .byte MLI_ONLINE
         .word test_online_params
 
         bne @fail
@@ -104,7 +104,7 @@ test_set_prefix:    ; test setting default prefix
         inc DemoBuffer      ; inc length to include /
 
         jsr EntryMLI
-        .byte $C6   ; SET_PREFIX
+        .byte MLI_SET_PREFIX
         .word test_set_prefix_params
 
         bne @fail
@@ -117,7 +117,7 @@ test_open:          ; try reading the file
         PUTS test_open_label
 
         jsr EntryMLI
-        .byte $C8   ; OPEN
+        .byte MLI_OPEN
         .word test_open_params
 
         bne @fail
@@ -134,7 +134,7 @@ test_read:
         sta test_read_params+1
 
         jsr EntryMLI
-        .byte $CA
+        .byte MLI_READ
         .word test_read_params
 
         bne @fail
@@ -178,7 +178,7 @@ LF = $0a
 OK:     .byte " OK",LF,0
 FAIL:   .byte " FAIL",LF,0
 
-test_getdatetime_label: .byte "GET_DATE_TIME",0
+test_gettime_label: .byte "GET_TIME",0
 
 test_online_label: .byte "ONLINE",0
 test_online_params:
@@ -257,22 +257,15 @@ Buffer Pointer ($44-45): Contains the address of a 512-byte memory buffer.
 Block Number ($46-$47): The 0-based index of a 512-block on the disk.
 */
 
-DEVICE_CMD = $42   ; aka dhpCmd
-DEVICE_UNT = $43   ; aka unitNum
-DEVICE_BUF = $44   ; aka bufPtr
-DEVICE_BLK = $46   ; aka blockNum
-
-
-
 RamDiskDriver:
         ldx DEVICE_CMD
         bne @next
-        ldy #0       ; status, return device size
+        ldy #0          ; DEVICE_CMD_STATUS, return device size
         ldx #RamDiskBlocks
         bra @ok
 
-@next:  cpx #3      ; format is a no-op
-        beq @ok
+@next:  cpx #DEVICE_CMD_FORMAT
+        beq @ok         ; no-op
 
         ; r/w set up pointer to the block in memory
         lda DEVICE_BLK  ; (blk - 2) * 2 is page offset into our memory
@@ -287,7 +280,7 @@ RamDiskDriver:
         sta ramPtr+1
         stz ramPtr
         ldy #0
-        cpx #1      ; read
+        cpx #DEVICE_CMD_READ
         bne @write
 
 @read:  lda (ramPtr),y

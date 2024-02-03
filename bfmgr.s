@@ -66,6 +66,7 @@ SynPath     EQU    *               ;Entry used by rename for second pathname
             INC    pathCnt         ; end of pathname processing
             INY                    ;Now check for full pathname...
             LDA    (tPath),Y       ;(Full name if starts with "/")
+    ;TODO removed ORA #$80 which makes this test always fail. weird.
             CMP    #'/'
             BNE    NotFullPN       ;Branch if prefix appended
             STA    prfxFlg         ;Set prefix flag to indicate prefix not used

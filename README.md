@@ -1,43 +1,111 @@
+This is the platform-independent, relocatable kernel of the ProDOS :tm: filesystem.
+It's adapated from the v2.0.3 source code found at https://github.com/markpmlim/ProDOS8.
+This was the last version published by Apple in 1993, identifying as `version=$23`.
+The notice in the original code appeared like:
 
-TODO
+    ProDOS 8 V2.0.3      06-May-93
+    Copyright Apple Computer, Inc., 1983-93
+    All Rights Reserved.
 
-- get rid of more unused symbols / defs
+Unfortunately the source for the more recent [ProDOS 2.4](https://prodos8.com/)
+doesn't appear to be publicly available at this time.
 
-- optionally reserve pages in memTabl below $C000 (default $0,1,$BF)
-    (CalcMemBit, WhichBit)
+The original ProDOS was a full operating system targeted at early Apple hardware
+platforms, including bootloader, display IO and hardware-specific device drivers.
+However it contains a core filesystem with a machine language interface (MLI)
+which are both [well documented](https://prodos8.com/docs/techref/) and not Apple-specific.
+Conveniently, ProDOS also abstracts all IO via a simple block device driver API.
+This makes it easy to plug in arbitrary storage devices like RAM disks or SD cards.
+Drivers simply read (and optionally write) sequentially numbered
+512 byte blocks from their storage.
 
-- check TODO
+This slimmed down build contains just that filesystem and MLI implementation
+in an easily relocatable form with no specific hardware dependencies.
+It requires a little under 8K ROM, 2K RAM and 10 zeropage bytes (normally at $40-4F).
+For maximum flexibility it's a "bring your own" driver platform
+which provides a well-tested, feature-rich filesystem for 65c02 platforms.
 
-- globals.s DateTime is self-modifying code for clock card (currently unused), could wire up to clock if exists, or make easier to configure (config.s with ReadClock = NoClock pointing at default routine)
+The example in `demo.s` shows how to interact with the MLI using a simple
+RAM disk device driver hosting a (very small!) standard ProDOS disk image.
+Using an SD card device driver would provide up to 14 x 32Mb volumes, or nearly
+half a gigabyte of read/write file storage.
 
-- make it ROM-able (separate writable buffer and workspace)
-    globals data tables => should be in data e.g.
-    SErr        DB     $00             ;Error code, 0=no error
+All of the documented MLI is supported except for `[ALLOC|DEALLOC]_INTERRUPT`.
+See the [quick reference](https://prodos8.com/docs/techref/quick-reference-card/).
 
+Building the demo
+---
 
-kVersion    DB     $23             ;Represents release 2.03
+The Merlin assembler code was ported to [cc65](https://cc65.github.io/) where
+it can be compiled like this:
 
+    cl65 -g --verbose --target none --config p8fs.cfg -m p8fs.map -Ln p8fs.sym -l p8fs.lst -o p8fs.bin p8fs.s
 
-- memory layout intermixed with buffers, see equates.s
+You can configure a clock driver and default device driver in `p8fs.s` which includes
+all other source.  The out of the box setup uses a simple RAM disk driver
+to run some simple demos in using [py65](https://github.com/mnaberez/py65).
+My [fork of py65](https://github.com/patricksurry/py65) has a few improvements (imho).
+After building the `p8fs.bin` ROM image you can run the demo like this:
 
-d000-d6ff  was core disk IO routines
-d700-ddff  is buffer space
+    ; prepare labels for py65
+    sed 's/\.//' p8fs.sym > /tmp/labels
 
+    py65mon -m 65c02 -l p8fs.bin -a c000
 
-    ;TODO
+    . batch /tmp/labels     ; import symbols
+    . load demovol.po $400  ; load disk image with block 2 @ $800
+    . goto test_start
 
-    orig        EQU    $D700
+This should run through a few tests and then show the opening lines of
+[The Hitchhikers Guide](https://en.wikipedia.org/wiki/The_Hitchhiker%27s_Guide_to_the_Galaxy)
+read from the RAM disk:
 
-    pathBuf     EQU    orig            ; 1 page
-    fcb         EQU    orig+$100       ;File Control Blocks (1 page)
-    vcb         EQU    orig+$200       ;Volume Control Blocks (1 page)
-    bmBuf       EQU    orig+$300       ;Bitmap buffer (2 page / 1 block)
-    genBuf      EQU    pathBuf+$500    ;General purpose buffer (2 page / 1 block)
+    GET_DATE_TIME OK
+    ONLINE OK
+    SET_PREFIX OK
+    OPEN OK
+    READ OK
+    Far out in the uncharted backwaters of the unfashionable  end  of
+    the  western  spiral  arm  of  the Galaxy lies a small unregarded
+    yellow sun.
+    ...
 
+There are many tools to create and manage ProDOS volumes as disk images.
+I wrote my own [pyprodos](https://github.com/patricksurry/pyprodos)
+as a way to better understand the filesystem spec. I created the demo
+volume like this:
 
-../cc65/bin/cl65 -g --verbose --target none --config p8fs.cfg -m p8fs.map -Ln p8fs.sym -l p8fs.lst -o p8fs.bin p8fs.s 2>&1
+    % prodos demovol.po create --size 10 --name DEMOVOL
+    % prodos demovol.po import hhg.txt README
+    % prodos demovol.po ls
 
-    . load demovol.po $400  ; puts block 2 at $800
-    . g test_start
+    README                  893 2/00 ------ 24-02-03T08:59 24-02-03T08:59 3 @ 7
+        1 files in DEMOVOL F RW-BN- 24-02-03T08:59
 
-sed 's/\.//' p8fs.sym > /tmp/labels ; py65mon -m 65c02 -l p8fs.bin -a c000 -b /tmp/labels
+Memory map
+---
+
+The original ProDOS had a global page at $BF00 with code living in
+banked memory beyond the $C000 I/O area.
+This implementation is easily relocatable via the `p8fs.cfg` file.
+The source is divided into four relocatable
+segments, `ZP`, `CODE`, `DATA` and `DEMO`.  `CODE` and `DEMO` (about 8K) can live in ROM,
+and `DATA` (2K) should be mapped to RAM.  Note that `ZP`(16 bytes) and `DATA` are not emitted
+in the output `p8fs.bin` image but are instead initialized by the `InitMLI` routine.
+
+ProDOS uses a simple memory mapping scheme to track free RAM pages in the lower 48K of memory.
+This is used for buffer management so its important to flag any pages needed for your
+code (including `DATA` if mapped below $C000)
+after calling `InitMLI` but before any `EntryMLI` call.
+The default initialization only reserves page 0 and 1 (zero page and stack).
+For example an MLI `OPEN` call checks that the IO buffer parameter points to free memory
+which it then reserves.
+
+Notes
+---
+
+A couple of lines in the [original code](https://github.com/markpmlim/ProDOS8/blob/a292fcb62ae866753f6dc461809a0f77b33e0cea/MLI.SRC/NEWFNDVOL.S#L24) were written like
+`LDA |blockNum,Y`.  I'm not sure what the `|` signified, and removed it.
+
+I removed what seemed like a spurious `ORA #$80` in [bfmgr.s](https://github.com/patricksurry/p8fs/blob/main/bfmgr.s#L69) which appeared to force the absolute path check to always fail.
+Maybe this was an unexercised path with the original initialization?

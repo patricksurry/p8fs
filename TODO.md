@@ -1,0 +1,1 @@
+- indirection at start of xdosmli.s not needed after moving globals page

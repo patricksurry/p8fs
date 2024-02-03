@@ -2,6 +2,7 @@
     .feature labels_without_colons
     .feature c_comments
 
+; portability defines to map Merlin assembler to ca65
     .define EQU     =
     .define DS      .res
     .define DB      .byte
@@ -13,6 +14,8 @@
 
 ; ClockBegin      = MyClockDriver   ; define this to configure clock routine
 DeviceDriver    = RamDiskDriver   ; illustrate a simple ram disk; leave undefined for none
+
+    .include "api.s"
 
         .segment "DEMO"
     .include "demo.s"
@@ -39,20 +42,20 @@ DeviceDriver    = RamDiskDriver   ; illustrate a simple ram disk; leave undefine
     .include "memmgr.s"     ; get/set buf mgmt; mirror devices
     .include "datatbls.s"   ; various constants, MLI routine jump table
 
-
-; import source files like this to fix local labels :1 => @1 and leading @ comments
+; original source files were imported with this sed command to
+; change local labels :1 => @1 and mark lines starting with @ as comments
 ;   sed -E -e 's/:([0-9a-zA-Z]+)/@\1/' -e 's/^\*/; @/' ../ProDOS8/MLI.SRC/FNDFIL.S > fndfil.s
 
 /*
-    original include order:
+    original include order with * indicating p8fs files:
 
 * PUT mli.src/Equates
  PUT mli.src/ProLdr
- PUT mli.src/DevSrch  ; add some device setup
+ PUT mli.src/DevSrch  ; original device setup
  PUT mli.src/Reloc
  PUT mli.src/RAM1
  PUT mli.src/RAM2
-* PUT mli.src/ROM
+ PUT mli.src/ROM
 * PUT mli.src/Globals
  PUT mli.src/TClock
  PUT mli.src/CClock
@@ -76,4 +79,4 @@ DeviceDriver    = RamDiskDriver   ; illustrate a simple ram disk; leave undefine
  PUT mli.src/SEL0
  PUT mli.src/SEL1
  PUT mli.src/SEL2
-; */
+*/

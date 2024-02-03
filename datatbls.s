@@ -12,24 +12,14 @@ scNums      EQU    *
             DFB    $00,$D0,$D1,$D2 ;zero is non-existent.
 
 pCntTbl     EQU    *               ;parameter counts for the calls
-/*
-            HEX    02FFFFFF
-            HEX    0201FFFF
-            HEX    03030004
-            HEX    07010207
-            HEX    0A020101
-            HEX    03030404
-            HEX    01010202
-            HEX    FF020202
-*/
-            .byte    $02, $FF, $FF, $FF
-            .byte    $02, $01, $FF, $FF
-            .byte    $03, $03, $00, $04
-            .byte    $07, $01, $02, $07
-            .byte    $0A, $02, $01, $01
-            .byte    $03, $03, $04, $04
-            .byte    $01, $01, $02, $02
-            .byte    $FF, $02, $02, $02
+            DFB    $02,$FF,$FF,$FF
+            DFB    $02,$01,$FF,$FF
+            DFB    $03,$03,$00,$04
+            DFB    $07,$01,$02,$07
+            DFB    $0A,$02,$01,$01
+            DFB    $03,$03,$04,$04
+            DFB    $01,$01,$02,$02
+            DFB    $FF,$02,$02,$02
 ; @-------------------------------------------------
 ; @ JMP table
 
@@ -91,8 +81,7 @@ compat      EQU    XDOSver+1
 rootStuff   DB     $0F,2,0,4
             DB     0,0,8,0
 
-WhichBit    ; HEX    8040201008040201
-            .byte   $80,$40,$20,$10,$08,$04,$02,$01
+WhichBit    DB     $80,$40,$20,$10,$08,$04,$02,$01
 
 ; @ The following table is used in the 'Open@loop1' (posn/open).
 ; @ Offsets into file control blocks (FCBs)
@@ -107,7 +96,3 @@ InfoTabl    DFB    d_attr,d_fileID,d_auxID,d_auxID+1
             DFB    $80+d_stor,$80+d_usage,$80+d_usage+1,d_modDate
             DFB    d_modDate+1,d_modTime,d_modTime+1,d_creDate
             DFB    d_creDate+1,d_creTime,d_creTime+1
-
-Death       ASC    "               "
-            ASC    "RESTART SYSTEM-$01"
-            ASC    "               "

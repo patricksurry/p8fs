@@ -1,23 +1,27 @@
+; **************************************************
+; from globals
+
+GoPro       JMP    EntryMLI         ;MLI call entry point
+
+    .if .defined(ClockDriver)
+DateTime    JMP    ClockDriver     ; configurable clock entry
+    .else
+DateTime    JMP    NoClock
+    .endif
+SysErr      JMP    SysErr1         ;Error reporting hook
+SysDeath    JMP    SysDeath1       ;System failure hook
+
 ; @ * * * * * * * * * * * * * * * *
 ; @    The xdos machine language  *
 ; @         interface (MLI)       *
 ; @      system call processor    *
 ; @ * * * * * * * * * * * * * * * *
 
-            .res orig1-*,0
-    .if 0
-            ORG    orig1
-            MX     %11 ;long status Mode of 65802
-    .endif
 EntryMLI    CLD                    ;Cannot deal with decimal mode!!!
             STY    SaveY           ;Preserve the y and x registers
             STX    SaveX
-            tsx
-            stx    Spare1
-    .if 0   ; reorder slightly
-            PLA                    ;Get processor status
-            STA    Spare1          ;Save it on the global page temporarily
-    .endif
+            tsx                     ;Get processor status
+            stx    Spare1           ;Save it on the global page temporarily
             PLA                    ;Find out the address of the caller
             STA    parm
             CLC                    ; & preserve the address of the call spec
@@ -79,27 +83,13 @@ EntryMLI    CLD                    ;Cannot deal with decimal mode!!!
 
             LDA    scNums,X        ;Get call number again
             CMP    #$65
-        .if 0
-            BEQ    Special
-        .else
-            beq    ExitMLI      ; not supported
-        .endif
+            beq    ExitMLI          ; special not supported
             ASL                    ;Carry set if bfm or dev mgr
             BPL    GoDevMgr
             BCS    GoBFMgr
-    .if 0
-            LSR                    ;Shift back down for interupt mgr
-
-; @ Isolate type
-; @ 0-alloc, 1-dealloc, 2-special
-
-            AND    #$03            ;Valid calls are 0 & 1
-            JSR    IntMgr
-    .endif
+                ; interrupt mgmt not supported
             BRA    ExitMLI         ;Command processed, all done
-        .if 0
-Special     JMP    jSpare          ;QUIT
-        .endif
+
 ; @*************************************************
 ; @ Command $82 - Get the date and time
 
@@ -139,11 +129,6 @@ ExitMLI     STZ    BUBit           ;First clear bubit
             TYA                    ;Return error, if any
             LDX    SaveX           ;Restore x & y registers
             LDY    SaveY
-    .if 0
-ExitRPM     PHA                    ; (exit point for rpm **en3**)
-            LDA    BnkByt1         ;Restore language card status & return
-            JMP    Exit
-    .endif
     ; from globals.s
             RTI                    ;Re-enable interrupts and return
 
@@ -203,163 +188,12 @@ DMgr        LDA    unitNum         ;Get device number
             LSR
             LSR
             TAX
-            LDA    DevAdr01,X      ;Fetch driver address
+            LDA    DevAdrTbl,X      ;Fetch driver address
             STA    goAdr
-            LDA    DevAdr01+1,X
+            LDA    DevAdrTbl+1,X
             STA    goAdr+1
 GoCmd       JMP    (goAdr)         ;Goto driver (or error if no driver)
 
-    .if 0
-;            TTL    'ProDOS Interrupt Manager'
-; @-------------------------------------------------
-; @ ProDOS interrupt manager
-; @ Handle ALLOC_INTERRUPTS ($40) and
-; @ DEALLOC_INTERRUPTS ($41) Calls
-
-IntMgr      STA    intCmd          ;Allocate intrupt or deallocate?
-            LSR                    ;(A=0, carry set=dealloc)
-            BCS    DeAlocInt       ;Branch if deallocation
-            LDX    #$03            ;Test for a free interupt space in table
-AlocInt     LDA    Intrup1-2,X     ;Test high addr for zero
-            BNE    @1              ;Branch if spot occupied
-            LDY    #c_intAdr+1     ;Fetch addr of routine
-            LDA    (parm),Y        ;Must not be in zero page!!!!
-            BEQ    BadInt          ;Branch if the fool tried it
-            STA    Intrup1-2,X     ;Save high address
-            DEY
-            LDA    (parm),Y
-            STA    Intrup1-3,X     ; & low address
-            TXA                    ;Now return interupt # in range of 1 to 4
-            LSR
-            DEY
-            STA    (parm),Y        ;Pass back to user
-            CLC                    ;Indicate success!
-            RTS
-
-@1          INX
-            INX                    ;Bump to next lower priority spot
-            CPX    #$0B            ;Are all four allocated already?
-            BNE    AlocInt         ;Branch if not
-
-            LDA    #irqTableFull   ;Return news that four devices are active
-            BNE    IntErr1
-
-BadInt      LDA    #paramRangeErr  ;Report invalid parameter
-IntErr1     JSR    SysErr
-
-DeAlocInt   LDY    #c_intNum       ;Zero out interupt vector
-            LDA    (parm),Y        ; but make sure it is valid #
-            BEQ    BadInt          ;Branch if it's <1
-            CMP    #$05            ; or >4
-            BCS    BadInt
-            ASL
-            TAX
-            LDA    #$00            ;Now zip it
-            STA    Intrup1-2,X
-            STA    Intrup1-1,X
-            CLC
-            RTS
-
-; @-------------------------------------------------
-; @ IRQ Handler - If an IRQ occurs, we eventually get HERE
-
-IrqRecev    LDA    Acc             ;Get Acc from 0-page where old ROM put it
-            STA    IntAReg
-            STX    IntXReg         ;Entry point on RAM card interupt
-            STY    IntYReg
-            TSX
-            STX    IntSReg
-            LDA    IrqFlag         ;Irq flag byte = 0 if old ROMs
-            BNE    @1              ;  and 1 if new ROMs
-            PLA
-            STA    IntPReg
-            PLA
-            STA    IntAddr
-            PLA
-            STA    IntAddr+1
-@1          TXS                    ;Restore return addr & p-reg to stack
-            LDA    MSLOT           ;Set up to re-enable $cn00 rom
-            STA    IrqDev+2
-            TSX                    ;Make sure stack has room for 16 bytes
-            BMI    NoStkSave       ;Branch if stack safe
-            LDY    #16-1
-StkSave     PLA
-            STA    SvStack,Y
-            DEY
-            BPL    StkSave
-
-NoStkSave   LDX    #$FA            ;Save 6 bytes of zero page
-ZPgSave     LDA    $00,X
-            STA    SvZeroPg-$FA,X
-            INX
-            BNE    ZPgSave
-
-; @ Poll interupt routines for a claimer
-
-            LDA    Intrup1+1       ;Test for valid routine
-            BEQ    @1              ;Branch if no routine
-            JSR    goInt1
-            BCC    IrqDone
-@1          LDA    Intrup2+1       ;Test for valid routine
-            BEQ    @2              ;Branch if no routine
-            JSR    goInt2          ;Execute routine
-            BCC    IrqDone
-@2          LDA    Intrup3+1       ;Test for valid routine
-            BEQ    @3              ;Branch if no routine
-            JSR    goInt3
-            BCC    IrqDone
-@3          LDA    Intrup4+1       ;Test for valid routine
-            BEQ    IrqDeath        ;Branch if no routine
-            JSR    goInt4          ;Execute routine
-            BCC    IrqDone
-
-; @************** see rev note #35 *************************
-
-IrqDeath    INC    IrqCount        ;Allow 255 unclaimed interrupts
-            BNE    IrqDone         ; before going to system death...
-            LDA    #unclaimedIntErr
-            JSR    SysDeath
-
-; @ IRQ processing complete
-
-IrqDone     LDX    #$FA
-@loop       LDA    SvZeroPg-$FA,X
-            STA    $00,X
-            INX
-            BNE    @loop
-            LDX    IntSReg         ;Test for necessity of restoring stack elements
-            BMI    @1
-            LDY    #$00
-@loop2      LDA    SvStack,Y
-            PHA
-            INY
-            CPY    #16
-            BNE    @loop2
-
-@1          LDA    IrqFlag         ;Check for old ROMs
-            BNE    IrqDoneX        ;Branch if new ROMs
-
-; @ Apple II or II+ monitor
-
-            LDY    IntYReg         ;Restore registers
-            LDX    IntXReg
-            LDA    CLRROM          ;Re-enable I/O card
-IrqDev      LDA    $C100           ;Warning, self modified
-            LDA    IrqDev+2        ;Restore device ID
-            STA    MSLOT
-IrqDoneX    JMP    irqXit
-
-IrqFlag     DB     $00             ;irq flag byte. 0=old ROMs; 1=new ROMs
-IrqCount    DB     $00             ;Unclaimed interrupt counter.(note #35)
-SvStack     DS     16,0
-SvZeroPg    DS     6,0
-
-goInt1      JMP    (Intrup1)
-goInt2      JMP    (Intrup2)
-goInt3      JMP    (Intrup3)
-goInt4      JMP    (Intrup4)
-
-    .endif
 
 ; @-------------------------------------------------
 ; @ System error handler
@@ -368,34 +202,11 @@ SysErr1     STA    SErr
             PLX
             PLX                    ;Pop 1 level of return
             SEC
-            RTS
+NoClock     RTS
 
 ; @-------------------------------------------------
 ; @ System death handler
 
 SysDeath1   TAX                    ;System death!!!
-/*
-;TODO
-            STA    CLR80VID        ;Force 40 columns on rev-e
-            LDA    TXTSET          ;Text mode on
-            LDA    cortFlag        ;Check if we're on a cortland
-            BEQ    NoSupHires
-            STZ    NEWVIDEO        ;Force off SuperHires
-NoSupHires  LDA    TXTPAGE1        ;Display page 1 on
-            LDY    #$13
-DspDeath    LDA    #' '
-            STA    SLIN10+10,Y
-            STA    SLIN12+10,Y
-            LDA    Death,Y
-            STA    SLIN11+10,Y
-            DEY
-            BPL    DspDeath
-            TXA
-            AND    #$0F
-            ORA    #'0'
-            CMP    #'9'+1
-            BCC    @1              ;Branch if not >9
-            ADC    #$06            ;Bump to alpha A-F
-@1          STA    SLIN11+28
-*/
+
 Halt        BRA    Halt            ;Hold forever

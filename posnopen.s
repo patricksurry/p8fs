@@ -338,7 +338,7 @@ RdFCBIdx    LDA    #rdCmd          ;Prepare to read in index bloc
 ; * Write key index blk
 
 WrFCBFst1   LDA    #wrtCmd         ;Set write mode for device
-            DB     $2C             ;Skip next 2 bytes for pseudo-branch always to RWFst
+            bra     RWFst
 
 ; * Read key index blk
 

@@ -71,7 +71,7 @@ ClrDir      STA    genBuf+2,X
             LDX    ownersBlock+1
             JSR    RdBlkAX         ;Read in 'parent' directory block
             LDX    ownersEnt       ;Prepare to calculate entry address
-            LDA    #genBuf/256
+            LDA    #>genBuf
             STA    dirBufPtr+1
 
             LDA    #$04            ;Skip 4-byte blk link ptrs
@@ -221,7 +221,7 @@ CrAlocBlk   JSR    Alloc1Blk       ;Get address of file's data block
 ; @-------------------------------------------------
 ; @ Point dirBufPtr ($48/$49) at directory entry
 
-EntCalc     LDA    #genBuf/256     ;Set high address of directory
+EntCalc     LDA    #>genBuf        ;Set high address of directory
             STA    dirBufPtr+1     ; entry index pointer
             LDA    #$04            ;Calculate address of entry based
             LDX    d_entNum        ; on the entry number

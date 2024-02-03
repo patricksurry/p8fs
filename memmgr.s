@@ -92,13 +92,13 @@ RelBufX     CLC                    ;Indicate no error
 ; @        (Y)=pointer to memTabl byte
 
 CalcMemBit  TXA                    ;Move page address to A
-            AND    #$07            ;Which page in any 2k set?
+            AND    #$07            ;Which page in any 2k (8 page) set?
             TAY                    ;Use as index to determine
             LDA    WhichBit,Y      ; bit position representation
             PHA                    ;Save bit position mask for now
             TXA                    ;Get page address again
             LSR
-            LSR                    ;Now determine 2K set
+            LSR                    ;Now determine 2K set (offset in memtabl)
             LSR
             TAY                    ;Return it in Y
             PLA                    ;Restore bit mask
@@ -171,132 +171,4 @@ SetBuf      LDY    #c_bufAdr+1
             CLC
 SetBufErr   RTS
 
-.if 0
 
-; @*************************************************
-; @
-; @  This is the routine that moves the 3 pages of dispatcher 1
-; @  from $D100 of the alt 4k bank to its execution address ($1000).
-; @  Since it is in the MLI and must swap the $D000-$DFFF banks,
-; @  it must be resident at all times above $E000.
-; @
-; @*************************************************
-
-; @ NB. There is a vector @ $FEFD which points to this rtn
-
-CallDisp    LDA    LCBANK2
-            LDA    LCBANK2         ;Bring in the other $D000 space
-            LDA    #>DispAdr       ;Destination address of user-code
-            STA    A2+1
-            LDA    #<DispAdr
-            STA    A2
-            LDA    #$D1            ;Dispatcher is stored at $D100-$D3FF
-            STA    A1+1
-            STZ    A1
-
-            LDY    #$00
-            LDX    #$03            ;3 pages of code to move
-MovPage     DEY                    ;Nifty routine to move a page of code
-            LDA    (A1),Y          ;Move all 255 bytes on the page
-            STA    (A2),Y
-            TYA
-            BNE    MovPage
-            INC    A1+1            ;Move pointers to next page
-            INC    A2+1
-            DEX
-            BNE    MovPage
-
-            LDA    LCBANK1
-            LDA    LCBANK1         ;Swap MLI's $D000 space back in
-
-            STZ    mliActv
-            STZ    SOFTEV          ;Set up the reset vector
-            LDA    #>DispAdr
-            STA    SOFTEV+1        ; to dispatch entry
-            EOR    #$A5            ;Set up power up byte
-            STA    PWREDUP
-            JMP    DispAdr
-
-.endif
-
-; @*************************************************
-; @ Handles calls to mirror devices
-; @ ProDOS unit #s are of the form DSSS xxxx
-; @ where the bits of the low nibble are the
-; @ attributes of the device.
-; @ D=0/1 (drive 1/drive 2)
-; @ The handler only supports 14 mirror devices
-; @ A statusCmd ($00) call will return the #
-; @ of blocks in (Y,X)
-
-MirrorDevEntry     LDX             #$03 ;Default parm cnt
-            LDA    dhpCmd          ;Get cmd
-            STA    spCmdNum
-            BNE    @1
-
-            LDY    #<spStatList    ;Its a statusCmd
-            STY    bufPtr
-            LDY    #>spStatList
-            STY    bufPtr+1
-            STZ    blockNum
-@1          CMP    #$03            ;FormatCmd?
-            BNE    @2              ;No
-
-            LDX    #$01            ;parm cnt for a formatCmd
-@2          STX    spCmdList
-            LDA    unitNum         ;(dsss 0000)
-            LSR
-            LSR
-            LSR
-            LSR
-            TAX                    ;0000 dsss ($01-$0F; $00,$08,$0B-invalid)
-            LDA    spUnits-1,X     ;Get actual SP unit # which
-            STA    spUnitNum       ; corr to this ProDOS unit #
-            LDA    spDrvAdrL-1,X
-            STA    CallSPort+1     ;Get addr of SP dev driver
-            LDA    spDrvAdrH-1,X
-            STA    CallSPort+2     ; which handles this SP unit
-
-            LDX    #$04
-@CpyLoop    LDA    bufPtr-1,X
-            STA    blkIOParms-1,X
-            DEX
-            BNE    @CpyLoop
-
-CallSPort   JSR    $0000           ;Go do it!
-spCmdNum    DB     $00
-            DA     spCmdList
-            BCS    @Rtn
-
-            LDX    spCmdNum        ;Was a SP STATUS call executed?
-            BNE    @Rtn            ;No
-            LDX    spDevTotBlks    ;# of blocks
-            LDY    spDevTotBlks+1
-            LDA    genStatus
-            BIT    #$10            ;Is dev online/disk in drive?
-            BNE    @1              ;Yes
-            LDA    #drvrOffLine
-            BRA    @2
-
-@1          AND    #$44            ;Retain bits 6,2
-            EOR    #$40            ;Is it write-protected?
-            BEQ    @Rtn            ;No
-            LDA    #drvrWrtProt
-@2          SEC
-@Rtn        RTS
-
-; @-------------------------------------------------
-; @ This table was built during a P8 boot
-
-spDrvAdrL   DS     $F,0            ;Actual entry points
-spDrvAdrH   DS     $F,0            ; of a device's driver
-
-; @ Command List used for all 4 commands viz
-; @ 0-Status, 1-Read Block, 2-Write Block, 3-Format
-; @ The caller must pass the parms using the
-; @ usual zp locations $42-$47
-
-spCmdList   DB     $03             ;parm count
-spUnitNum   DB     $00             ;unit #
-blkIOParms  DA     $0000           ;Data I/O buf
-blokNum     DB     0,0,0           ;blk # (only 2 bytes used)

@@ -1,14 +1,19 @@
-This is the platform-independent, relocatable kernel of the ProDOS :tm: filesystem.
+This is a portable relocatable kernel for the ProDOS :tm: filesystem.
 It's adapated from the v2.0.3 source code found at https://github.com/markpmlim/ProDOS8.
 This was the last version published by Apple in 1993, identifying as `version=$23`.
-The notice in the original code appeared like:
+Unfortunately the source for the more recent [ProDOS 2.4](https://prodos8.com/)
+doesn't appear to be publicly available at this time.
+The notice in the original code appeared as:
 
     ProDOS 8 V2.0.3      06-May-93
     Copyright Apple Computer, Inc., 1983-93
     All Rights Reserved.
 
-Unfortunately the source for the more recent [ProDOS 2.4](https://prodos8.com/)
-doesn't appear to be publicly available at this time.
+ The work here is
+purely for my own education and not intended for any commerical use.
+As a long-ago Apple //e owner and user of ProDOS it's been fun working
+to understand more about how it worked and resurrect some of it
+on a 65c02-based breadboard computer.
 
 The original ProDOS was a full operating system targeted at early Apple hardware
 platforms, including bootloader, display IO and hardware-specific device drivers.

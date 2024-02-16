@@ -11,21 +11,22 @@
     .define DW      .word
     .define ASC     .literal
 
-
-; ClockBegin      = MyClockDriver   ; define this to configure clock routine
-DeviceDriver    = RamDiskDriver   ; illustrate a simple ram disk; leave undefined for none
+; user should define ClockDriver. Use NoClock which just points at a rts,
+; or implement the ProDOS clock interface (see xdosmli.s)
+    .import ClockDriver
+    .export InitMLI, EntryMLI, NoClock
+    .export DevCnt, DevAdrTbl, memTabl
 
     .include "api.s"
-
-        .segment "DEMO"
-    .include "demo.s"
 
         .zeropage
         .org $40            ; MLI interface vars defined here
     .include "equates.s"    ; zero page and various constants
+
         .reloc
         .data
     .include "wrkspace.s"   ; work area
+
         .code
     .include "xdosmli.s"    ; main EntryMLI aka GoPro(DOS) entrypoint
     .include "init.s"       ; one time InitMLI setup

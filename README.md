@@ -9,8 +9,8 @@ The notice in the original code appeared as:
     Copyright Apple Computer, Inc., 1983-93
     All Rights Reserved.
 
- The work here is
-purely for my own education and not intended for any commerical use.
+The work here is purely for my own education
+and not intended for any commerical use.
 As a long-ago Apple //e owner and user of ProDOS it's been fun working
 to understand more about how it worked and resurrect some of it
 on a 65c02-based breadboard computer.
@@ -42,20 +42,29 @@ Building the demo
 ---
 
 The Merlin assembler code was ported to [cc65](https://cc65.github.io/) where
-it can be compiled like this:
+it can be compiled as a relocatable object `p8fs.o` like this:
 
-    cl65 -g --verbose --target none --config p8fs.cfg -m p8fs.map -Ln p8fs.sym -l p8fs.lst -o p8fs.bin p8fs.s
+    cl65 -c -g --verbose --target none  -l p8fs.lst -o p8fs.o p8fs.s
 
-You can configure a clock driver and default device driver in `p8fs.s` which includes
-all other source.  The out of the box setup uses a simple RAM disk driver
-to run some simple demos in using [py65](https://github.com/mnaberez/py65).
-My [fork of py65](https://github.com/patricksurry/py65) has a few improvements (imho).
-After building the `p8fs.bin` ROM image you can run the demo like this:
+The object requires one external symbol `ClockDriver` which can be set
+to the imported `NoClock` or just pointed at a known `rts` instruction.
+
+To use the filesystem kernel, you should call `InitMLI`,
+register at least one device,
+and then interact with the ProDOS MLI using `EntryMLI`.
+See `demo.s` with some simple examples interacting with a RAM-disk driver:
+
+    cl65 -g --verbose --target none --config p8fs.cfg -m demo.map -Ln demo.sym -o demo.bin p8fs.o demo.s
+
+You can run the demo in a simulator like [py65](https://github.com/mnaberez/py65).
+My [fork of py65](https://github.com/patricksurry/py65)
+has a few improvements (imho).
+Build the ROM image `demo.bin` and run like this:
 
     ; prepare labels for py65
-    sed 's/\.//' p8fs.sym > /tmp/labels
+    sed 's/\.//' demo.sym > /tmp/labels
 
-    py65mon -m 65c02 -l p8fs.bin -a c000
+    py65mon -m 65c02 -l demo.bin -a c000
 
     . batch /tmp/labels     ; import symbols
     . load demovol.po $400  ; load disk image with block 2 @ $800

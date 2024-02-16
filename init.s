@@ -27,17 +27,7 @@ InitMLI:
         dex
         bpl @nodev
 
-    .if .defined(DeviceDriver)
-        ; register DeviceDriver e as d0s0
-        lda #<DeviceDriver
-        sta DevAdrTbl
-        lda #>DeviceDriver
-        sta DevAdrTbl+1
-
-        lda #0      ; 1 active device
-    .else
         lda #$ff    ; 0 active devices
-    .endif
 
         ; set up the active device list
         ; DevLst is a list of indices to DevAdrTbl (0, 1, ... )

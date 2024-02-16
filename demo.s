@@ -1,3 +1,6 @@
+    .setcpu "65C02"
+    .feature c_comments
+
 /*
 This demo sets up and tests a simple ram disk driver which exposes
 a small ProDOS disk image.  The disk image reserves blocks 0-1 for the boot loader
@@ -46,8 +49,27 @@ ReadmeLen = 893     ; expected length of file we're reading
         jsr puts
     .endmacro
 
+        .include "api.s"
+
+    .import InitMLI, EntryMLI, NoClock
+    .import DevCnt, DevAdrTbl, memTabl
+
+ClockDriver = NoClock
+    .export ClockDriver
+
+        .segment "DEMO"
+
 test_start:
-        jsr InitMLI     ; init MLI including our driver via p8fs.s::DeviceDriver
+        jsr InitMLI     ; init MLI
+
+        ; install our device driver as d0s0
+        lda #<RamDiskDriver
+        sta DevAdrTbl
+        lda #>RamDiskDriver
+        sta DevAdrTbl+1
+
+        lda #0      ; indicates 1 active device
+        sta DevCnt
 
         ; flag memory we're using (24 pages = 12 blocks = 6K)
         lda #$ff
@@ -150,7 +172,7 @@ test_read:
         bne @fail
         bra @ok
 @fail:  jmp test_fail
-@ok     PUTS OK
+@ok:    PUTS OK
 
         lda #0
         sta (sPtr)
@@ -291,7 +313,7 @@ RamDiskDriver:
         inc ramPtr+1
         lda ramPtr+1
         lsr
-        bcs @read     ; odd page?
+        bcs @read     ; odd page (block-aligned)?
         bra @ok
 
 @write: lda (DEVICE_BUF),y

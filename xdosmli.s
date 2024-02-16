@@ -1,13 +1,8 @@
 ; **************************************************
 ; from globals
 
-GoPro       JMP    EntryMLI         ;MLI call entry point
-
-    .if .defined(ClockDriver)
-DateTime    JMP    ClockDriver     ; configurable clock entry
-    .else
-DateTime    JMP    NoClock
-    .endif
+GoPro       JMP    EntryMLI        ;MLI call entry point
+DateTime    JMP    ClockDriver     ; configurable clock entry, use NoClock (or any rts) for none
 SysErr      JMP    SysErr1         ;Error reporting hook
 SysDeath    JMP    SysDeath1       ;System failure hook
 

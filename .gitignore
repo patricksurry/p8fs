@@ -2,3 +2,4 @@
 *.map
 *.bin
 *.sym
+*.o

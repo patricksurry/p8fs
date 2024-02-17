@@ -35,6 +35,7 @@ PUTC = $f001
 ramPtr = $50
 sPtr = $52
 
+ScratchParams := $200      ; scratch space for r/w params
 
 DemoBuffer := $400
 RamDiskStart := $800     ; note we'll load our disk image @ $400, to ignore two boot sector blocks
@@ -59,8 +60,13 @@ RamDiskUnitNum = $CF   ; install our device driver as d1s6 with capability forma
 ClockDriver = NoClock
     .export ClockDriver
 
-        .segment "DEMO"
+LF = $0a
 
+        .data
+OK:     .byte " OK",LF,0
+FAIL:   .byte " FAIL (C=1 or A!=0)",LF,0
+
+        .code
 test_start:
         jsr InitMLI     ; init MLI
 
@@ -72,6 +78,9 @@ test_start:
         sta DEVICE_UNT
         jsr RegisterMLI
 
+        ldx #>ScratchParams          ; reserve param space
+        jsr ReserveMLI
+
         ; flag the memory we're using for the RAM drive
         ldx #>RamDiskStart          ; first page index
 @mark:  jsr ReserveMLI
@@ -79,6 +88,10 @@ test_start:
         cpx #>RamDiskEnd            ; first free page
         bne @mark
 
+        .data
+test_gettime_label: .byte "GET_TIME",0
+
+        .code
 test_gettime:   ; test a no-op (or configure ClockBegin in p8fs.s)
         PUTS test_gettime_label
 
@@ -92,6 +105,14 @@ test_gettime:   ; test a no-op (or configure ClockBegin in p8fs.s)
 @fail:  jmp test_fail
 @ok:    PUTS OK
 
+        .data
+test_online_label: .byte "ONLINE",0
+test_online_params:
+        .byte 2
+        .byte 0             ; request all devices, else dsss.... requests slot s, drive d
+        .word DemoBuffer    ; output buffer, 16 or 256 bytes, not reserved
+
+        .code
 test_online:        ; test whether our device shows as online
         PUTS test_online_label
 
@@ -106,14 +127,22 @@ test_online:        ; test whether our device shows as online
         ora #7
         ; expect DemoBuffer to contain (unit | len), "DEMOVOL"
         cmp DemoBuffer
-        bne @fail
+        bne @fail2
         lda DemoBuffer+1
         cmp #'D'
-        bne @fail
+        bne @fail2
         bra @ok
+@fail2: lda #$ff
 @fail:  jmp test_fail
 @ok:    PUTS OK
 
+        .data
+test_set_prefix_label: .byte "SET_PREFIX",0
+test_set_prefix_params:
+        .byte 1
+        .word DemoBuffer    ; path derived from volume name we just found
+
+        .code
 test_set_prefix:    ; test setting default prefix
     ; the startup prefix is null
     ; seems to need an abs prefix (starting with /) for open to work
@@ -142,12 +171,33 @@ test_set_prefix:    ; test setting default prefix
 @fail:  jmp test_fail
 @ok:    PUTS OK
 
+        .data
+test_open_label: .byte "OPEN",0
+test_open_params:
+        .byte 3
+        .word PathName
+        .word RamDiskEnd    ; 1024-byte input/output buffer not already used
+open_fh_offset = * - test_open_params
+        .res 1              ; filehandle result
+open_params_len = * - test_open_params
+PathName:
+        .byte 6, "README"
+
+        .code
 test_open:          ; try reading the file
         PUTS test_open_label
 
+        ; copy the params to scratch so MLI can write FH
+        ldx #0
+@cp:    lda test_open_params,x
+        sta ScratchParams,x
+        inx
+        cpx open_params_len
+        bne @cp
+
         jsr GoMLI
         .byte MLI_OPEN
-        .word test_open_params
+        .word ScratchParams
 
         bne @fail
         bcs @fail
@@ -155,36 +205,57 @@ test_open:          ; try reading the file
 @fail:  jmp test_fail
 @ok:    PUTS OK
 
+        .data
+test_read_label: .byte "READ",0
+test_read_params:
+        .byte 4
+read_fh_offset = * - test_read_params
+        .res 1
+        .word DemoBuffer
+        .word $400      ; request bytes
+read_actual_offset = * - test_read_params
+        .res 2          ; actual bytes
+read_params_len = * - test_read_params
+
+        .code
 test_read:
         PUTS test_read_label
 
-        ;TODO these param blocks need to be in RAM, e.g. @ $100
-        lda test_open_params+5  ; get filehandle
-        sta test_read_params+1
+        ; copy param block to scratch so we can include file handle
+        lda ScratchParams + open_fh_offset
+        tay
+        ldx #0
+@cp:    lda test_read_params,x
+        sta ScratchParams,x
+        inx
+        cpx read_params_len
+        bne @cp
+        ; update the FH
+        sty ScratchParams + read_fh_offset
 
         jsr GoMLI
         .byte MLI_READ
-        .word test_read_params
+        .word ScratchParams
 
         bne @fail
         bcs @fail
 
-        lda test_read_params+6
+        lda ScratchParams + read_actual_offset
         sta sPtr
         cmp #<ReadmeLen
-        bne @fail
-        lda test_read_params+7
+        bne @fail2
+        lda ScratchParams + read_actual_offset + 1
         sta sPtr+1
         cmp #>ReadmeLen
-        bne @fail
+        bne @fail2
         bra @ok
+@fail2: lda #$ff
 @fail:  jmp test_fail
 @ok:    PUTS OK
 
         lda #0
         sta (sPtr)
         PUTS DemoBuffer
-
         PUTS OK
         brk             ; end of demo
 
@@ -196,46 +267,11 @@ puts:   ; put a string from sPtr until zero byte
         bne puts
         inc sPtr+1
         bra puts
- @done: rts
+@done:  rts
 
 test_fail:
         PUTS FAIL
         brk
-
-LF = $0a
-
-OK:     .byte " OK",LF,0
-FAIL:   .byte " FAIL",LF,0
-
-test_gettime_label: .byte "GET_TIME",0
-
-test_online_label: .byte "ONLINE",0
-test_online_params:
-        .byte 2
-        .byte 0             ; request all devices, else dsss.... requests slot s, drive d
-        .word DemoBuffer    ; output buffer, 16 or 256 bytes, not reserved
-
-test_set_prefix_label: .byte "SET_PREFIX",0
-test_set_prefix_params:
-        .byte 1
-        .word DemoBuffer    ; path derived from volume name we just found
-
-test_open_label: .byte "OPEN",0
-test_open_params:
-        .byte 3
-        .word PathName
-        .word RamDiskEnd    ; 1024-byte input/output buffer not already used
-        .res 1              ; filehandle result
-PathName:
-        .byte 6, "README"
-
-test_read_label: .byte "READ",0
-test_read_params:
-        .byte 4
-        .res 1
-        .word DemoBuffer
-        .word $400      ; request bytes
-        .res 2          ; actual bytes
 
 /*
 The ProDOS MLI does all reading and writing via a simple interace to

@@ -31,10 +31,11 @@ MLI_GET_TIME        = $82   ; [ ]
 
 ; device driver API
 
-DEVICE_CMD = $42    ; aka dhpCmd
-DEVICE_UNT = $43    ; aka unitNum
-DEVICE_BUF = $44    ; aka bufPtr
-DEVICE_BLK = $46    ; aka blockNum
+DEVICE_CMD := $42   ; aka dhpCmd
+DEVICE_UNT := $43   ; aka unitNum
+DEVICE_BUF := $44   ; aka bufPtr
+DEVICE_DRV := DEVICE_BUF    ; used for RegisterMLI
+DEVICE_BLK := $46   ; aka blockNum
 
 DEVICE_CMD_STATUS   = 0     ; ready for r/w?; return device block size as [Y, X]
 DEVICE_CMD_READ     = 1     ; read block => buf

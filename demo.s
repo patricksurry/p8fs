@@ -15,11 +15,11 @@ and then set up at least one block device driver pointing at a ProDOS disk volum
 We also need to reserve any memory pages in the lower 48K to avoid
 ProDOS allocating them for buffer space.
 
-From then on we can call ProDOS MLI normally by JSR EntryMLI
+From then on we can call ProDOS MLI normally by JSR GoMLI
 followed by a 3 byte cmd/param block.  Parameters are read and/or written
 from the block pointed to by `CMDLIST`.
 
-    JSR EntryMLI    ; Call Command Dispatcher
+    JSR GoMLI    ; Call Command Dispatcher
     DB  CMDNUM      ; This determines which call is being made
     DW  CMDLIST     ; A two-byte pointer to the parameter list
     BNE ERROR       ; Error if nonzero (A=err) also carry set
@@ -35,11 +35,14 @@ PUTC = $f001
 ramPtr = $50
 sPtr = $52
 
-DemoBuffer = $400
-RamDiskStart = $800
+
+DemoBuffer := $400
+RamDiskStart := $800     ; note we'll load our disk image @ $400, to ignore two boot sector blocks
 RamDiskBlocks = 8
-RamDiskEnd = $800 + RamDiskBlocks * $200
+RamDiskEnd := RamDiskStart + RamDiskBlocks * $200
 ReadmeLen = 893     ; expected length of file we're reading
+
+RamDiskUnitNum = $CF   ; install our device driver as d1s6 with capability format/read/write/status
 
     .macro PUTS label
         lda #<label
@@ -51,8 +54,7 @@ ReadmeLen = 893     ; expected length of file we're reading
 
         .include "api.s"
 
-    .import InitMLI, EntryMLI, NoClock
-    .import DevCnt, DevAdrTbl, memTabl
+    .import InitMLI, RegisterMLI, ReserveMLI, GoMLI, NoClock
 
 ClockDriver = NoClock
     .export ClockDriver
@@ -62,26 +64,25 @@ ClockDriver = NoClock
 test_start:
         jsr InitMLI     ; init MLI
 
-        ; install our device driver as d0s0
         lda #<RamDiskDriver
-        sta DevAdrTbl
+        sta DEVICE_DRV
         lda #>RamDiskDriver
-        sta DevAdrTbl+1
+        sta DEVICE_DRV+1
+        lda #RamDiskUnitNum
+        sta DEVICE_UNT
+        jsr RegisterMLI
 
-        lda #0      ; indicates 1 active device
-        sta DevCnt
-
-        ; flag memory we're using (24 pages = 12 blocks = 6K)
-        lda #$ff
-        ldx #2
-@mark:  sta memTabl,x
-        dex
+        ; flag the memory we're using for the RAM drive
+        ldx #>RamDiskStart          ; first page index
+@mark:  jsr ReserveMLI
+        inx
+        cpx #>RamDiskEnd            ; first free page
         bne @mark
 
 test_gettime:   ; test a no-op (or configure ClockBegin in p8fs.s)
         PUTS test_gettime_label
 
-        jsr EntryMLI
+        jsr GoMLI
         .byte MLI_GET_TIME
         .word 0     ; no params
 
@@ -94,14 +95,17 @@ test_gettime:   ; test a no-op (or configure ClockBegin in p8fs.s)
 test_online:        ; test whether our device shows as online
         PUTS test_online_label
 
-        jsr EntryMLI
+        jsr GoMLI
         .byte MLI_ONLINE
         .word test_online_params
 
         bne @fail
         bcs @fail
-        lda DemoBuffer      ; should contain (dvc << 4) | len, "DEMOVOL"
-        cmp #7
+        lda #RamDiskUnitNum
+        and #$f0
+        ora #7
+        ; expect DemoBuffer to contain (unit | len), "DEMOVOL"
+        cmp DemoBuffer
         bne @fail
         lda DemoBuffer+1
         cmp #'D'
@@ -116,16 +120,19 @@ test_set_prefix:    ; test setting default prefix
         PUTS test_set_prefix_label
 
         ; prepend the volume name with a / to make an absolute prefix
-        ldx DemoBuffer
-@copy:  lda DemoBuffer,x
+        lda DemoBuffer
+        and #$0f                ; clear the unit number
+        tax                     ; offset to last char in volume name
+        inc
+        sta DemoBuffer          ; inc length to include leading '/'
+@copy:  lda DemoBuffer,x        ; shift name over one to make space
         sta DemoBuffer+1,x
         dex
         bne @copy
         lda #'/'
         sta DemoBuffer+1
-        inc DemoBuffer      ; inc length to include /
 
-        jsr EntryMLI
+        jsr GoMLI
         .byte MLI_SET_PREFIX
         .word test_set_prefix_params
 
@@ -138,7 +145,7 @@ test_set_prefix:    ; test setting default prefix
 test_open:          ; try reading the file
         PUTS test_open_label
 
-        jsr EntryMLI
+        jsr GoMLI
         .byte MLI_OPEN
         .word test_open_params
 
@@ -155,7 +162,7 @@ test_read:
         lda test_open_params+5  ; get filehandle
         sta test_read_params+1
 
-        jsr EntryMLI
+        jsr GoMLI
         .byte MLI_READ
         .word test_read_params
 
@@ -205,20 +212,20 @@ test_gettime_label: .byte "GET_TIME",0
 test_online_label: .byte "ONLINE",0
 test_online_params:
         .byte 2
-        .byte 0     ; request all devices, else dsss.... requests slot s, drive d
-        .word DemoBuffer  ; output buffer, 16 or 256 bytes
+        .byte 0             ; request all devices, else dsss.... requests slot s, drive d
+        .word DemoBuffer    ; output buffer, 16 or 256 bytes, not reserved
 
 test_set_prefix_label: .byte "SET_PREFIX",0
 test_set_prefix_params:
         .byte 1
-        .word DemoBuffer ; use the volume we just found, high nibble is clear since dvc=0
+        .word DemoBuffer    ; path derived from volume name we just found
 
 test_open_label: .byte "OPEN",0
 test_open_params:
         .byte 3
         .word PathName
         .word RamDiskEnd    ; 1024-byte input/output buffer not already used
-        .res 1      ; filehandle result
+        .res 1              ; filehandle result
 PathName:
         .byte 6, "README"
 

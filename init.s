@@ -27,11 +27,11 @@ InitMLI:
         dex
         bpl @nodev
 
-        lda #$ff    ; 0 active devices
-
         ; set up the active device list
+;TODO update
         ; DevLst is a list of indices to DevAdrTbl (0, 1, ... )
         ; and DevCnt is the number of active devices, less 1, so #$ff means none
+        lda #$ff    ; 0 active devices
         sta DevCnt
 
         ; set up the map of allocated memory in the lower 48K
@@ -52,9 +52,43 @@ InitMLI:
         lda #$c0
         sta memTabl     ; reserve zp and stack
 
+        ; reserve the workspace pages
     .assert wrkspace_end - wrkspace_start <= $800, error, "workspace exceeds 8 pages"
     .assert wrkspace_start & $03ff = 0, error, "workspace not aligned to 8-page boundary"
         lda #$ff
         sta memTabl + (wrkspace_start >> 11)
 
+        rts
+
+
+RegisterMLI:
+    ; register device driver with address in DEVICE_DRV as DEVICE_UNT (dsss iiii)
+    ; and add to the active device list.
+    ; The unit byte dsss iiii indicates the device number (originally drive 0-1 plus slot 0-7)
+    ; and driver support for format/write/read/status (iiii=FWRS)
+    ; NB. the same driver can be registered multiple times as different numbers,
+    ; e.g. corresponding to different physical volumes
+
+        inc DevCnt      ; append new unit to active list
+        ldx DevCnt
+        lda DEVICE_UNT
+        sta DevLst,x
+
+        and #$f0        ; unit num -> driver table offset
+        lsr
+        lsr
+        lsr
+        tax
+        lda DEVICE_DRV
+        sta DevAdrTbl,x
+        lda DEVICE_DRV+1
+        sta DevAdrTbl+1,x
+
+        rts
+
+ReserveMLI:     ; (X) --> nil,  X unchanged
+    ; use memmgr CalcMemBit to reserve a memory page 0<=X<$c0
+        jsr CalcMemBit      ; returns A as bit mask, Y as offset in memTabl
+        ora memTabl,y       ; reserve the page
+        sta memTabl,y
         rts

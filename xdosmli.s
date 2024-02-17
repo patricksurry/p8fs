@@ -1,7 +1,7 @@
 ; **************************************************
 ; from globals
 
-GoPro       JMP    EntryMLI        ;MLI call entry point
+GoPro       JMP    GoMLI        ;MLI call entry point
 DateTime    JMP    ClockDriver     ; configurable clock entry, use NoClock (or any rts) for none
 SysErr      JMP    SysErr1         ;Error reporting hook
 SysDeath    JMP    SysDeath1       ;System failure hook
@@ -12,7 +12,7 @@ SysDeath    JMP    SysDeath1       ;System failure hook
 ; @      system call processor    *
 ; @ * * * * * * * * * * * * * * * *
 
-EntryMLI    CLD                    ;Cannot deal with decimal mode!!!
+GoMLI    CLD                    ;Cannot deal with decimal mode!!!
             STY    SaveY           ;Preserve the y and x registers
             STX    SaveX
             tsx                     ;Get processor status

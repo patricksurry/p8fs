@@ -14,8 +14,8 @@
 ; user should define ClockDriver. Use NoClock which just points at a rts,
 ; or implement the ProDOS clock interface (see xdosmli.s)
     .import ClockDriver
-    .export InitMLI, EntryMLI, NoClock
-    .export DevCnt, DevAdrTbl, memTabl
+
+    .export InitMLI, RegisterMLI, ReserveMLI, GoMLI, NoClock
 
     .include "api.s"
 
@@ -24,11 +24,11 @@
     .include "equates.s"    ; zero page and various constants
 
         .reloc
-        .data
+        .segment "P8RAM"
     .include "wrkspace.s"   ; work area
 
         .code
-    .include "xdosmli.s"    ; main EntryMLI aka GoPro(DOS) entrypoint
+    .include "xdosmli.s"    ; main GoMLI aka GoPro(DOS) entrypoint
     .include "init.s"       ; one time InitMLI setup
     .include "bfmgr.s"      ; block file manager
     .include "create.s"     ; create handler

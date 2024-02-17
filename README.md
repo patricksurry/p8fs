@@ -50,11 +50,12 @@ The object requires one external symbol `ClockDriver` which can be set
 to the imported `NoClock` or just pointed at a known `rts` instruction.
 
 To use the filesystem kernel, you should call `InitMLI`,
-register at least one device,
-and then interact with the ProDOS MLI using `EntryMLI`.
+register at least one device with `RegisterMLI`,
+reserve memory for your own code with `ReserveMLI`,
+and then interact with the ProDOS MLI using `GoMLI`.
 See `demo.s` with some simple examples interacting with a RAM-disk driver:
 
-    cl65 -g --verbose --target none --config p8fs.cfg -m demo.map -Ln demo.sym -o demo.bin p8fs.o demo.s
+    cl65 -g --verbose --target none --config demo.cfg -m demo.map -Ln demo.sym -o demo.bin p8fs.o demo.s
 
 You can run the demo in a simulator like [py65](https://github.com/mnaberez/py65).
 My [fork of py65](https://github.com/patricksurry/py65)
@@ -110,7 +111,7 @@ in the output `p8fs.bin` image but are instead initialized by the `InitMLI` rout
 ProDOS uses a simple memory mapping scheme to track free RAM pages in the lower 48K of memory.
 This is used for buffer management so its important to flag any pages needed for your
 code (including `DATA` if mapped below $C000)
-after calling `InitMLI` but before any `EntryMLI` call.
+after calling `InitMLI` but before any `GoMLI` call.
 The default initialization only reserves page 0 and 1 (zero page and stack).
 For example an MLI `OPEN` call checks that the IO buffer parameter points to free memory
 which it then reserves.

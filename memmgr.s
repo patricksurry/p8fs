@@ -4,8 +4,10 @@
 AllocBuf    LDY    #c_bufPtr+1     ;Index to user specified buffer
 AllocBufZ   LDA    (parm),Y        ;This buffer must be on a page boundary
             TAX                    ;Save in X-reg for validation
+    .if 0   ; skip apple specific tests, these will be caught in mem
             CMP    #$08
             BCC    BadBufr         ;Cannot be lower than video!
+    .endif
             CMP    #$BC            ;Nor greater than $BB00
             BCS    BadBufr         ; since it would wipe out globals...
             STA    dataPtr+1
@@ -120,6 +122,7 @@ ValDBuf     LDA    userBuf+1       ;Get high addr of user's buffer
             TXA                    ;Do hi addr
             ADC    userBuf+1       ;All we care about is final addr
             TAX                    ;Must be less than $BF (globals)
+;TODO explicit check not needed, caught in CalcMemBit?
             CPX    #$BF
             BCS    BadBufr
             INX                    ;Loop thru all  affected pages
@@ -170,5 +173,3 @@ SetBuf      LDY    #c_bufAdr+1
             BPL    @loop
             CLC
 SetBufErr   RTS
-
-

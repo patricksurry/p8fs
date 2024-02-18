@@ -1,4 +1,4 @@
-InitMLI:
+InitMLI:    ; () -> nil
         ; zero the entire workspace
     .assert (<wrkspace_start) = 0, error, "wrkspace must be page-aligned"
         lda #0
@@ -27,10 +27,9 @@ InitMLI:
         dex
         bpl @nodev
 
-        ; set up the active device list
-;TODO update
-        ; DevLst is a list of indices to DevAdrTbl (0, 1, ... )
-        ; and DevCnt is the number of active devices, less 1, so #$ff means none
+        ; DevCnt is one less than the active device count, the index of the last
+        ; active device in DevLst with #$ff meaning none
+        ; DevLst (initially nil) is a list of unit numbers %dsss iiii - see RegisterMLI
         lda #$ff    ; 0 active devices
         sta DevCnt
 
@@ -53,6 +52,7 @@ InitMLI:
         sta memTabl     ; reserve zp and stack
 
         ; reserve the workspace pages
+;TODO 8pg align is lazy
     .assert wrkspace_end - wrkspace_start <= $800, error, "workspace exceeds 8 pages"
     .assert wrkspace_start & $03ff = 0, error, "workspace not aligned to 8-page boundary"
         lda #$ff
@@ -64,10 +64,12 @@ InitMLI:
 RegisterMLI:
     ; register device driver with address in DEVICE_DRV as DEVICE_UNT (dsss iiii)
     ; and add to the active device list.
-    ; The unit byte dsss iiii indicates the device number (originally drive 0-1 plus slot 0-7)
-    ; and driver support for format/write/read/status (iiii=FWRS)
-    ; NB. the same driver can be registered multiple times as different numbers,
-    ; e.g. corresponding to different physical volumes
+    ; The unit byte %dsssiiii indicates the device number (originally drive 0-1 plus slot 0-7)
+    ; where 2 * dsss (high nibble) indexes the driver addresses in DevAdrTbl
+    ; and iiii=fwrs indicates driver support for format/write/read/status operations
+    ; NB. the same driver can be registered multiple times as different unit numbers
+    ; (duplicate entries in DevLst) with DEVICE_UNT available to the driver
+    ; e.g. indicating different partitions on the same device
 
         inc DevCnt      ; append new unit to active list
         ldx DevCnt

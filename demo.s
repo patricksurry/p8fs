@@ -192,7 +192,7 @@ test_open:          ; try reading the file
 @cp:    lda test_open_params,x
         sta ScratchParams,x
         inx
-        cpx open_params_len
+        cpx #open_params_len
         bne @cp
 
         jsr GoMLI
@@ -228,7 +228,7 @@ test_read:
 @cp:    lda test_read_params,x
         sta ScratchParams,x
         inx
-        cpx read_params_len
+        cpx #read_params_len
         bne @cp
         ; update the FH
         sty ScratchParams + read_fh_offset
@@ -254,6 +254,7 @@ test_read:
 @ok:    PUTS OK
 
         lda #0
+; TODO wrong need to add base
         sta (sPtr)
         PUTS DemoBuffer
         PUTS OK

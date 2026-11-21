@@ -41,8 +41,7 @@ See the [quick reference](https://prodos8.com/docs/techref/quick-reference-card/
 Building the demo
 ---
 
-The Merlin assembler code was ported to [cc65](https://cc65.github.io/) (version 2.19 or later,
-which added `.literal`) where it can be compiled as a relocatable object `p8fs.o` like this:
+The Merlin assembler code was ported to [cc65](https://cc65.github.io/) where it can be compiled as a relocatable object `p8fs.o` like this:
 
     cl65 -c -g --target none -l p8fs.lst -o p8fs.o p8fs.s
 

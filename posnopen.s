@@ -62,8 +62,7 @@ TypMark     EQU    *               ;Now find out which type
             BCC    TreePos         ;Yes, go position
             JMP    DirMark         ;No, test for directory type
 
-;TODO   was LDY    #fcbPtr   ; seems wrong, out-of-range if not zp?
-@11         LDY    fcbPtr         ;Clear illegally typed FCB entry
+@11         LDY    fcbPtr          ;Clear illegally typed FCB entry (the original had #fcbPtr)
             STA    fcb+fcbRefNum,Y
             LDA    #invalidRefNum  ;Tell 'em there is no such file
             SEC

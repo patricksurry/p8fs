@@ -35,7 +35,7 @@ NoPreRef    ASL    cmdTmp          ;Lastly check for necessity of time stamp
 
 ; * For MLI calls $C0-$C4, $CC, $CD
 
-            JSR    DateTime        ;(No error posible)
+            JSR    ClockDriver     ;(No error posible)
 
 Execute     JSR    GoCmd           ;Execute command
             BCC    GoodOp          ;Branch if successful
@@ -66,8 +66,8 @@ SynPath     EQU    *               ;Entry used by rename for second pathname
             INC    pathCnt         ; end of pathname processing
             INY                    ;Now check for full pathname...
             LDA    (tPath),Y       ;(Full name if starts with "/")
-    ;TODO removed ORA #$80 which makes this test always fail. weird.
-            CMP    #'/'
+            ORA    #$80            ;Accept "/" with either high bit, and set bit 7
+            CMP    #'/'|$80        ; so that BIT prfxFlg sees a full pathname (Merlin's "/" was $AF)
             BNE    NotFullPN       ;Branch if prefix appended
             STA    prfxFlg         ;Set prefix flag to indicate prefix not used
             INY                    ;Index to first character of pathname

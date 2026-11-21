@@ -21,8 +21,7 @@ RootMisc    LDA    vcb+vcbTotBlks,X;Misc info includes
             STA    h_totBlk,Y      ; total # of blocks,
             LDA    vcb+vcbBitMap,X ; the disk addr of the first bitmap,
             STA    h_bitMap,Y
-;TODO was LDA |blockNum,Y  ; is that some banking notation??
-            LDA    blockNum,Y     ; directory's disk address,
+            LDA    blockNum,Y      ; directory's disk address (Merlin's |blockNum forced abs,Y),
             STA    d_head,Y
             LDA    h_fileCnt,Y     ; & lastly, setting up a counter for
             STA    entCnt,Y        ; the # of files in this directory

@@ -26,7 +26,7 @@ Drivers simply read (and optionally write) sequentially numbered
 
 This slimmed down build contains just that filesystem and MLI implementation
 in an easily relocatable form with no specific hardware dependencies.
-It requires a little under 8K ROM, 2K RAM and 10 zeropage bytes (normally at $40-4F).
+It requires a little under 8K ROM, 2K RAM and 16 zeropage bytes (normally at $40-4F).
 For maximum flexibility it's a "bring your own" driver platform
 which provides a well-tested, feature-rich filesystem for 65c02 platforms.
 
@@ -41,10 +41,10 @@ See the [quick reference](https://prodos8.com/docs/techref/quick-reference-card/
 Building the demo
 ---
 
-The Merlin assembler code was ported to [cc65](https://cc65.github.io/) where
-it can be compiled as a relocatable object `p8fs.o` like this:
+The Merlin assembler code was ported to [cc65](https://cc65.github.io/) (version 2.19 or later,
+which added `.literal`) where it can be compiled as a relocatable object `p8fs.o` like this:
 
-    cl65 -c -g --verbose --target none  -l p8fs.lst -o p8fs.o p8fs.s
+    cl65 -c -g --target none -l p8fs.lst -o p8fs.o p8fs.s
 
 The object requires one external symbol `ClockDriver` which can be set
 to the imported `NoClock` or just pointed at a known `rts` instruction.
@@ -53,31 +53,26 @@ To use the filesystem kernel, you should call `InitMLI`,
 register at least one device with `RegisterMLI`,
 reserve memory for your own code with `ReserveMLI`,
 and then interact with the ProDOS MLI using `GoMLI`.
-See `demo.s` with some simple examples interacting with a RAM-disk driver:
+See `demo.s` with some simple examples interacting with a RAM-disk driver.
+The demo links the disk image `demovol.po` at $400 (so block 2 lands at $800),
+the code at $C000 and a reset vector pointing at `test_start`:
 
-    cl65 -g --verbose --target none --config demo.cfg -m demo.map -Ln demo.sym -o demo.bin p8fs.o demo.s
+    cl65 -g --target none --config demo.cfg -m demo.map -Ln demo.sym -o demo.bin p8fs.o demo.s
 
-You can run the demo in a simulator like [py65](https://github.com/mnaberez/py65).
-My [fork of py65](https://github.com/patricksurry/py65)
-has a few improvements (imho).
-Build the ROM image `demo.bin` and run like this:
+Run it in my [c65](https://github.com/patricksurry/c65) simulator, which provides
+the same magic I/O as [py65](https://github.com/mnaberez/py65) and exits on `brk`.
+`demo.sh` builds and runs it in one step:
 
-    ; prepare labels for py65
-    sed 's/\.//' demo.sym > /tmp/labels
-
-    py65mon -m 65c02 -l demo.bin -a c000
-
-    . batch /tmp/labels     ; import symbols
-    . load demovol.po $400  ; load disk image with block 2 @ $800
-    . goto test_start
+    c65 -r demo.bin -a 0x400
 
 This should run through a few tests and then show the opening lines of
 [The Hitchhikers Guide](https://en.wikipedia.org/wiki/The_Hitchhiker%27s_Guide_to_the_Galaxy)
 read from the RAM disk:
 
-    GET_DATE_TIME OK
+    GET_TIME OK
     ONLINE OK
     SET_PREFIX OK
+    GET_FILE_INFO OK
     OPEN OK
     READ OK
     Far out in the uncharted backwaters of the unfashionable  end  of
@@ -85,28 +80,35 @@ read from the RAM disk:
     yellow sun.
     ...
 
+You can check that the kernel never writes to ROM using the c65 debugger:
+start it with `c65 -g -l demo.sym -r demo.bin -a 0x400`, then
+`break c000.ffff w` to stop on any write above $C000,
+`delete f000..16` to allow the magic I/O block, and `continue`.
+The demo should run to its final `brk` without stopping.
+
 There are many tools to create and manage ProDOS volumes as disk images.
 I wrote my own [pyprodos](https://github.com/patricksurry/pyprodos)
 as a way to better understand the filesystem spec. I created the demo
-volume like this:
+volume from `hhg.txt` like this:
 
-    % prodos demovol.po create --size 10 --name DEMOVOL
-    % prodos demovol.po import hhg.txt README
-    % prodos demovol.po ls
+    % prodos create demovol.po --size 10 --name DEMOVOL
+    % prodos import demovol.po --type TXT hhg.txt /README
+    % prodos ls demovol.po
 
-    README                  893 2/00 ------ 24-02-03T08:59 24-02-03T08:59 3 @ 7
-        1 files in DEMOVOL F RW-BN- 24-02-03T08:59
+    File name               EOF T/FT  Aux Access Created        Modified      Blocks @ Key
+    --------------------------------------------------------------------------------------
+    README                  893 2/04 0000 RW-BND 26-11-21T07:07 26-11-21T07:07     3 @ 7
+        1 files in DEMOVOL F RW--ND 26-11-21T07:07
 
 Memory map
 ---
 
 The original ProDOS had a global page at $BF00 with code living in
 banked memory beyond the $C000 I/O area.
-This implementation is easily relocatable via the `p8fs.cfg` file.
-The source is divided into four relocatable
-segments, `ZP`, `CODE`, `DATA` and `DEMO`.  `CODE` and `DEMO` (about 8K) can live in ROM,
-and `DATA` (2K) should be mapped to RAM.  Note that `ZP`(16 bytes) and `DATA` are not emitted
-in the output `p8fs.bin` image but are instead initialized by the `InitMLI` routine.
+This implementation is easily relocatable with a linker config like `demo.cfg`.
+The kernel uses three segments: `CODE` (about 7.7K) can live in ROM,
+`P8RAM` (2K, aligned to $800) must be RAM, and `ZEROPAGE` (16 bytes) is normally at $40.
+`P8RAM` and `ZEROPAGE` don't need to be in your ROM image since `InitMLI` initializes them.
 
 ProDOS uses a simple memory mapping scheme to track free RAM pages in the lower 48K of memory.
 This is used for buffer management so its important to flag any pages needed for your
@@ -119,8 +121,16 @@ which it then reserves.
 Notes
 ---
 
-A couple of lines in the [original code](https://github.com/markpmlim/ProDOS8/blob/a292fcb62ae866753f6dc461809a0f77b33e0cea/MLI.SRC/NEWFNDVOL.S#L24) were written like
-`LDA |blockNum,Y`.  I'm not sure what the `|` signified, and removed it.
+A few things that changed in porting the Merlin source to ca65:
 
-I removed what seemed like a spurious `ORA #$80` in [bfmgr.s](https://github.com/patricksurry/p8fs/blob/main/bfmgr.s#L69) which appeared to force the absolute path check to always fail.
-Maybe this was an unexercised path with the original initialization?
+- Merlin character constants in double quotes have the high bit set, so `"/"` is $AF while `'/'` is $2F.
+  The original pathname check did `ORA #$80` / `CMP #"/"`, which accepts a slash with either high bit
+  and leaves bit 7 set in `prfxFlg`, where later `BIT prfxFlg` tests tell full pathnames from
+  prefixed ones.  ca65 treats both quotes the same, so the port compares with `'/'|$80`.
+- Merlin's `|` operand prefix, as in `LDA |blockNum,Y`, forces absolute addressing.
+  `blockNum` is in zero page, but there's no `LDA zp,Y` so any assembler emits the
+  absolute form anyway, and the prefix isn't needed.
+- The original's jump vectors at the top of the global page (`GoPro`, `DateTime`, `SysErr`, `SysDeath`)
+  let other programs patch them.  That's not possible in ROM, so p8fs calls the targets directly.
+- One real bug in the original: `LDY #fcbPtr` (the address) where `LDY fcbPtr` (the value) was meant,
+  on a path that's never taken for a valid file.

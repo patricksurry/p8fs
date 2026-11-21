@@ -1,11 +1,3 @@
-; **************************************************
-; from globals
-
-GoPro       JMP    GoMLI        ;MLI call entry point
-DateTime    JMP    ClockDriver     ; configurable clock entry, use NoClock (or any rts) for none
-SysErr      JMP    SysErr1         ;Error reporting hook
-SysDeath    JMP    SysDeath1       ;System failure hook
-
 ; @ * * * * * * * * * * * * * * * *
 ; @    The xdos machine language  *
 ; @         interface (MLI)       *
@@ -88,7 +80,7 @@ GoMLI    CLD                    ;Cannot deal with decimal mode!!!
 ; @*************************************************
 ; @ Command $82 - Get the date and time
 
-GoClock     JSR    DateTime        ;go read clock
+GoClock     JSR    ClockDriver     ;go read clock
             BRA    ExitMLI         ;No errors posible!
 
 ; @*************************************************
@@ -150,8 +142,7 @@ DevMgr      LDY    #$05            ;The call spec for devices must
             PHP                    ;(do not allow interupts)
             SEI
 @loop       LDA    (parm),Y        ; be passed to drivers in zero page
-;TODO was STA |dhpCmd, Y   ; maybe some banking notation??
-            STA    dhpCmd,Y       ;dhpCmd,unitNum,bufPtr,blockNum
+            STA    dhpCmd,Y        ;dhpCmd,unitNum,bufPtr,blockNum (Merlin's |dhpCmd forced abs,Y)
             DEY
             BNE    @loop
             LDX    bufPtr+1
@@ -193,7 +184,7 @@ GoCmd       JMP    (goAdr)         ;Goto driver (or error if no driver)
 ; @-------------------------------------------------
 ; @ System error handler
 
-SysErr1     STA    SErr
+SysErr      STA    SErr
             PLX
             PLX                    ;Pop 1 level of return
             SEC
@@ -202,6 +193,6 @@ NoClock     RTS
 ; @-------------------------------------------------
 ; @ System death handler
 
-SysDeath1   TAX                    ;System death!!!
+SysDeath    TAX                    ;System death!!!
 
 Halt        BRA    Halt            ;Hold forever

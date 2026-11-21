@@ -122,8 +122,8 @@ ValDBuf     LDA    userBuf+1       ;Get high addr of user's buffer
             TXA                    ;Do hi addr
             ADC    userBuf+1       ;All we care about is final addr
             TAX                    ;Must be less than $BF (globals)
-;TODO explicit check not needed, caught in CalcMemBit?
-            CPX    #$BF
+            CPX    #$BF            ;Needed: CalcMemBit doesn't range check, and memTabl
+                                       ; covers only pages below $C0 ($BF was the globals page)
             BCS    BadBufr
             INX                    ;Loop thru all  affected pages
 

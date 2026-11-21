@@ -38,7 +38,7 @@ sPtr = $52
 ScratchParams := $200      ; scratch space for r/w params
 
 DemoBuffer := $400
-RamDiskStart := $800     ; note we'll load our disk image @ $400, to ignore two boot sector blocks
+RamDiskStart := $800     ; the disk image is linked at $400, so its two boot blocks are skipped
 RamDiskBlocks = 8
 RamDiskEnd := RamDiskStart + RamDiskBlocks * $200
 ReadmeLen = 893     ; expected length of file we're reading
@@ -172,6 +172,37 @@ test_set_prefix:    ; test setting default prefix
 @ok:    PUTS OK
 
         .data
+test_info_label: .byte "GET_FILE_INFO",0
+test_info_params:
+        .byte $0a
+        .word FullPathName
+        .res 16             ; access, types, blocks and dates are returned here
+info_params_len = * - test_info_params
+FullPathName:
+        .byte 15, "/DEMOVOL/README"
+
+        .code
+test_info:          ; a full pathname works whatever the prefix
+        PUTS test_info_label
+
+        ldx #0
+@cp:    lda test_info_params,x
+        sta ScratchParams,x
+        inx
+        cpx #info_params_len
+        bne @cp
+
+        jsr GoMLI
+        .byte MLI_GET_FILE_INFO
+        .word ScratchParams
+
+        bne @fail
+        bcs @fail
+        bra @ok
+@fail:  jmp test_fail
+@ok:    PUTS OK
+
+        .data
 test_open_label: .byte "OPEN",0
 test_open_params:
         .byte 3
@@ -241,11 +272,9 @@ test_read:
         bcs @fail
 
         lda ScratchParams + read_actual_offset
-        sta sPtr
         cmp #<ReadmeLen
         bne @fail2
         lda ScratchParams + read_actual_offset + 1
-        sta sPtr+1
         cmp #>ReadmeLen
         bne @fail2
         bra @ok
@@ -253,8 +282,14 @@ test_read:
 @fail:  jmp test_fail
 @ok:    PUTS OK
 
+        clc                 ; terminate the text at DemoBuffer + length read
+        lda ScratchParams + read_actual_offset
+        adc #<DemoBuffer
+        sta sPtr
+        lda ScratchParams + read_actual_offset + 1
+        adc #>DemoBuffer
+        sta sPtr+1
         lda #0
-; TODO wrong need to add base
         sta (sPtr)
         PUTS DemoBuffer
         PUTS OK
@@ -377,3 +412,9 @@ RamDiskDriver:
 @err:   lda #$27    ; IO error
         sec
         rts
+
+        .segment "RAMDISK"
+        .incbin "demovol.po"    ; blocks 0-1 at $400, so block 2 is at RamDiskStart
+
+        .segment "VECTORS"
+        .word 0, test_start, 0  ; nmi, reset, irq

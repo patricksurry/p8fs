@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  demo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cc65 and build c65
+        run: |
+          sudo apt-get update && sudo apt-get install -y cc65
+          git clone --depth 1 https://github.com/patricksurry/c65 "$RUNNER_TEMP/c65"
+          make -C "$RUNNER_TEMP/c65" c65
+          echo "$RUNNER_TEMP/c65" >> "$GITHUB_PATH"
+      - name: Build and run the demo
+        run: |
+          ca65 --version
+          sh demo.sh < /dev/null | tee demo.out
+          grep -q '^READ OK' demo.out
+          ! grep -q FAIL demo.out

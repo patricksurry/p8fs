@@ -9,7 +9,6 @@
     .define DFB     .byte
     .define DA      .word
     .define DW      .word
-    .define ASC     .literal
 
 ; user should define ClockDriver. Use NoClock which just points at a rts,
 ; or implement the ProDOS clock interface (see xdosmli.s)

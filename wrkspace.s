@@ -221,7 +221,7 @@ DevLst      .byte 0,0,0,0,0      ;Up to 14 units may be active
 ; * 1, unprotected with a 0. ProDOS dis-allows reading or
 ; * buffer allocation in protected areas.
 
-; starting memory map just blocks page $0, 1 and $BF (globals)
+; InitMLI clears this and then reserves pages 0 and 1 (and the workspace)
 memTabl     .byte $c0,0,0,0,0,0,0,0
             .byte   0,0,0,0,0,0,0,0
             .byte   0,0,0,0,0,0,0,1
